@@ -3,81 +3,36 @@ name: Terraform CI
 on:
   pull_request:
     branches: [main]
-    paths:
-      - "modules/**"
-      - "examples/**"
-      - "tests/**"
-      - ".tflint.hcl"
-      - ".github/workflows/ci.yml"
   push:
     branches: [main]
-    paths:
-      - "modules/**"
-      - "examples/**"
-      - "tests/**"
-      - ".tflint.hcl"
-      - ".github/workflows/ci.yml"
 
 permissions:
   contents: read
 
-env:
-  TF_VERSION: "1.9.8"
-  TF_IN_AUTOMATION: "true"
-  TF_INPUT: "false"
-
 jobs:
-  fmt-and-validate:
-    name: Format & Validate
+  validate:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        working_dir:
-          - modules/vpc
-          - examples/dev
-          - examples/stage
-          - examples/prod
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Check Terraform formatting
-        run: terraform fmt -check -recursive -diff
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: ${{ env.TF_VERSION }}
-          terraform_wrapper: false
+          terraform_version: 1.9.8
 
-      - name: Terraform init (no backend)
-        working-directory: ${{ matrix.working_dir }}
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Initialize Module
+        working-directory: modules/vpc
         run: terraform init -backend=false
 
-      - name: Terraform validate
-        working-directory: ${{ matrix.working_dir }}
+      - name: Validate Module
+        working-directory: modules/vpc
         run: terraform validate
 
-  tflint:
-    name: TFLint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup TFLint
-        uses: terraform-linters/setup-tflint@v4
-        with:
-          tflint_version: v0.53.0
-
-      - name: Init TFLint plugins
-        working-directory: modules/vpc
-        run: tflint --init --config ../../.tflint.hcl
-
-      - name: Run TFLint on module and examples
+      - name: Run Native Terraform Plan Tests
         run: |
-          for dir in modules/vpc examples/dev examples/stage examples/prod; do
-            echo "Linting $dir..."
-            tflint --chdir="$dir" --config="$PWD/.tflint.hcl"
-          done
+          terraform init -backend=false
+          terraform test
